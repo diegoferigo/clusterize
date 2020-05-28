@@ -58,8 +58,8 @@ def dockerize_cluster(cluster: structures.cluster.Cluster) -> structures.cluster
              f"-l clusterize.project={cluster.cluster_name}"
 
     docker_run = f"docker run -t --rm -d --name {cname} {labels} --net host " \
-                 f"-v ~/{cluster_bootstrap}:/{cluster_bootstrap}:ro " \
-                 f"-v ~/{cluster_ssh_key}:/{cluster_ssh_key}:ro " \
+                 f"-v ~/.clusterize/{cluster_bootstrap}:/{cluster_bootstrap}:ro " \
+                 f"-v ~/.clusterize/{cluster_ssh_key}:/{cluster_ssh_key}:ro " \
                  f"-e LC_ALL=C.UTF-8 -e LANG=C.UTF-8 " \
                  f"{head_extra_run_options} " \
                  f"{head_img} bash"
@@ -91,8 +91,8 @@ def dockerize_cluster(cluster: structures.cluster.Cluster) -> structures.cluster
              f"-l clusterize.project={cluster.cluster_name}"
 
     docker_run = f"docker run -t --rm -d --name {cname} {labels} --net host " \
-                 f"-v ~/{cluster_bootstrap}:/{cluster_bootstrap}:ro " \
-                 f"-v ~/{cluster_ssh_key}:/{cluster_ssh_key}:ro " \
+                 f"-v ~/.clusterize/{cluster_bootstrap}:/{cluster_bootstrap}:ro " \
+                 f"-v ~/.clusterize/{cluster_ssh_key}:/{cluster_ssh_key}:ro " \
                  f"-e LC_ALL=C.UTF-8 -e LANG=C.UTF-8 " \
                  f"-e RAY_HEAD_IP={cluster.provider.head_ip} " \
                  f"{worker_extra_run_options} " \

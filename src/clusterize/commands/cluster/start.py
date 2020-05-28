@@ -55,11 +55,13 @@ def deploy_cluster_resources(cluster: structures.cluster.Cluster) -> None:
             user=cluster.auth.ssh_user,
             connect_kwargs={'key_filename': str(ssh_key)})
 
-        result: transfer.Result = connection.put(local=tmpfile,
-                                                 remote="cluster_bootstrap.yaml")
+        _ = connection.run(command="mkdir -p $HOME/.clusterize")
 
-        result: transfer.Result = connection.put(local=str(ssh_key),
-                                                 remote="cluster_ssh_key.pem")
+        result: transfer.Result = connection.put(
+            local=tmpfile, remote=".clusterize/cluster_bootstrap.yaml")
+
+        result: transfer.Result = connection.put(
+            local=str(ssh_key), remote=".clusterize/cluster_ssh_key.pem")
 
 
 def initialize(cluster: structures.cluster.Cluster) -> None:
