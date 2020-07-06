@@ -88,9 +88,18 @@ class ClusterCmdLine:
     @staticmethod
     def _cluster_execute():
 
+        command = os.path.basename(sys.argv[0]) + " " + " ".join(sys.argv[1:3])
+        example = inspect.cleandoc(f"""
+                example:
+                    {command} --session exp1 --project foo --shell ls -al 
+                """)
+        # TODO: docker?
+        # TODO: required args?
+
         execute_parser = argparse.ArgumentParser(
             description="Execute a command in a session.",
             prog=os.path.basename(sys.argv[0]) + " " + " ".join(sys.argv[1:3]),
+            epilog=example,
             formatter_class=argparse.RawDescriptionHelpFormatter)
 
         execute_parser.add_argument(
@@ -119,6 +128,10 @@ class ClusterCmdLine:
             "--docker", action="store_true", default=False,
             help="Execute the command in the docker containers if the cluster has docker "
                  "support")
+
+        execute_parser.add_argument(
+            "--tmux", action="store_true", default=False,
+            help="Execute the command in a persistent tmux session")
 
         args, extra = execute_parser.parse_known_args(sys.argv[3:])
         commands.cluster.execute.execute(args)
@@ -211,6 +224,10 @@ class ProjectCmdLine:
             help="The directory of the project")
 
         execute_parser.add_argument(
+            "--tmux", action="store_true", default=False,
+            help="Execute the command in a persistent tmux session")
+
+        execute_parser.add_argument(
             "--session", metavar="NAME", type=str,
             help="The session name (default: the project name)")
 
@@ -226,7 +243,7 @@ class SessionCmdLine:
             description="Session manager.",
             prog=os.path.basename(sys.argv[0]) + " " + sys.argv[1])
 
-        choices = ["list"]
+        choices = ["list", "start"]
         session_parser.add_argument("subcommand", type=str, choices=choices, help="")
 
         args, _ = session_parser.parse_known_args(sys.argv[2:3])
@@ -251,6 +268,20 @@ class SessionCmdLine:
 
         args, extra = list_parser.parse_known_args(sys.argv[3:])
         commands.session.listsess.listsess(args)
+
+    @staticmethod
+    def _session_start():
+
+        start_parser = argparse.ArgumentParser(
+            description="Start a new project sessions.",
+            prog=os.path.basename(sys.argv[0]) + " " + " ".join(sys.argv[1:3]))
+
+        start_parser.add_argument(
+            "project_dir", metavar="DIR", type=str,
+            help="The directory of the project")
+
+        args, extra = start_parser.parse_known_args(sys.argv[3:])
+        commands.session.start.start(args)
 
 
 class CmdLineParser(ClusterCmdLine, ProjectCmdLine, SessionCmdLine):

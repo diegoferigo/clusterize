@@ -26,7 +26,7 @@ def stop(args: Namespace) -> None:
     project_data = utils.project.get_project_data(project_folder=args.project_dir)
 
     if project_data is None:
-        raise RuntimeError(f"No project found in '{project_data.directory}'")
+        raise RuntimeError(f"No project found in '{args.project_dir}'")
 
     with open(file=project_data.cluster, mode='r') as f:
         cls: structures.cluster.Cluster = structures.cluster.Cluster.from_yaml(data=f)

@@ -4,14 +4,20 @@ import fabric
 from . import base
 from pathlib import Path
 from functools import partial
-from clusterize import structures
+from collections import OrderedDict
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Callable, ContextManager
+from clusterize import structures, utils
+from typing import Callable, ContextManager, Dict
 
 
-RunCallableGroup = Callable[[str, float, bool, bool], fabric.GroupResult]
-RunCallableConnection = Callable[[str, float, bool, bool], fabric.Result]
+RunCallableGroup = Callable[[str, Dict[str, str], bool, bool, float], fabric.GroupResult]
+RunCallableConnection = Callable[[str, Dict[str, str], bool, bool, float], fabric.Result]
+
+
+DEFAULT_SSH_ENV = OrderedDict(
+    CLUSTERIZE_DIR="$HOME/.clusterize",
+)
 
 
 @dataclass
@@ -40,32 +46,54 @@ class SSHCommandRunner(base.CommandRunner):
 
     def run(self,
             cmd: str,
-            timeout: float = base.DEFAULT_TIMEOUT,
+            env: Dict[str, str] = None,
             print_output: bool = False,
-            allow_failures: bool = False) -> fabric.Result:
+            allow_failures: bool = False,
+            timeout: float = base.DEFAULT_TIMEOUT,
+            asynchronous: bool = False,
+            disown: bool = False,
+            pty: bool = False) -> fabric.Result:
 
         return SSHCommandRunner.run_connection(
             connection=self.connection,
             cmd=cmd,
+            env=env,
             timeout=timeout,
             print_output=print_output,
-            allow_failures=allow_failures)
+            allow_failures=allow_failures,
+            asynchronous=asynchronous,
+            disown=disown,
+            pty=pty)
 
+    # TODO: docker run -it non funziona, interactive?
     @staticmethod
     def run_connection(connection: fabric.Connection,
                        cmd: str,
-                       timeout: float = base.DEFAULT_TIMEOUT,  # TODO
+                       env: Dict[str, str] = None,
                        print_output: bool = False,
-                       allow_failures: bool = True) -> fabric.Result:
+                       allow_failures: bool = False,
+                       timeout: float = base.DEFAULT_TIMEOUT,
+                       asynchronous: bool = False,
+                       disown: bool = False,
+                       pty: bool = False) -> fabric.Result:
 
-        if allow_failures is False:
-            result = connection.run(command=cmd, hide=not print_output)
+        ssh_env = DEFAULT_SSH_ENV.copy()
 
-        else:
-            try:
-                result = connection.run(command=cmd, hide=not print_output)
-            except invoke.exceptions.UnexpectedExit as e:
-                result = e.result
+        if env is not None:
+            ssh_env.update(env)
+
+        inline_env = utils.session.get_inline_env(env=ssh_env)
+
+        if print_output:
+            print(f"❯ {inline_env} && {cmd}")
+
+        result = connection.run(command=f"{inline_env} && {cmd}",
+                                warn=allow_failures,
+                                hide=not print_output,
+                                timeout=timeout,
+                                asynchronous=asynchronous,
+                                disown=disown,
+                                pty=pty)
 
         return result
 
@@ -80,6 +108,7 @@ class SSHCommandRunner(base.CommandRunner):
         connection = fabric.Connection(
             host=node_info.ip,
             user=node_info.username,
+            inline_ssh_env=True,
             connect_kwargs={'key_filename': str(ssh_private_key)})
 
         return connection
@@ -118,32 +147,49 @@ class SSHGroupCommandRunner(base.CommandGroupRunner):
 
     def run(self,
             cmd: str,
-            timeout: float = base.DEFAULT_TIMEOUT,
+            env: Dict[str, str] = None,
             print_output: bool = False,
-            allow_failures: bool = False) -> fabric.GroupResult:
+            allow_failures: bool = False,
+            timeout: float = base.DEFAULT_TIMEOUT,
+            asynchronous: bool = False,
+            disown: bool = False) -> fabric.GroupResult:
 
         return SSHGroupCommandRunner.run_group(
             group=self.group,
             cmd=cmd,
+            env=env,
             timeout=timeout,
             print_output=print_output,
-            allow_failures=allow_failures)
+            allow_failures=allow_failures,
+            asynchronous=asynchronous,
+            disown=disown)
 
     @staticmethod
     def run_group(group: fabric.Group,
                   cmd: str,
-                  timeout: float = base.DEFAULT_TIMEOUT,  # TODO
+                  env: Dict[str, str] = None,
                   print_output: bool = False,
-                  allow_failures: bool = False):
+                  allow_failures: bool = False,
+                  timeout: float = base.DEFAULT_TIMEOUT,
+                  asynchronous: bool = False,
+                  disown: bool = False) -> fabric.GroupResult:
 
-        if allow_failures is False:
-            result = group.run(command=cmd, hide=not print_output)
+        ssh_env = DEFAULT_SSH_ENV.copy()
 
-        else:
-            try:
-                result = group.run(command=cmd, hide=not print_output)
-            except invoke.exceptions.UnexpectedExit as e:
-                result = e.result
+        if env is not None:
+            ssh_env.update(env)
+
+        inline_env = utils.session.get_inline_env(env=ssh_env)
+
+        if print_output:
+            print(f"❯ {inline_env} && {cmd}")
+
+        result = group.run(command=f"{inline_env} && {cmd}",
+                           warn=allow_failures,
+                           hide=not print_output,
+                           timeout=timeout,
+                           asynchronous=asynchronous,
+                           disown=disown)
 
         return result
 
@@ -163,6 +209,7 @@ class SSHGroupCommandRunner(base.CommandGroupRunner):
         group = fabric_group_cls(
             *group_info.ips,
             user=group_info.username,
+            inline_ssh_env=True,
             connect_kwargs={'key_filename': str(ssh_private_key)})
 
         return group
@@ -204,9 +251,12 @@ class SSHClusterCommandRunner(base.CommandClusterRunner,
 
     def run_in_head(self,
                     cmd: str,
-                    timeout: float = base.DEFAULT_TIMEOUT,
+                    env: Dict[str, str] = None,
                     print_output: bool = False,
-                    allow_failures: bool = False) -> fabric.Result:
+                    allow_failures: bool = False,
+                    timeout: float = base.DEFAULT_TIMEOUT,
+                    asynchronous: bool = False,
+                    disown: bool = False) -> fabric.Result:
 
         head_info = SSHClusterCommandRunner.head_connection_info(cluster=self._cluster)
         connection = SSHCommandRunner.connection_from_node_info(node_info=head_info)
@@ -214,15 +264,21 @@ class SSHClusterCommandRunner(base.CommandClusterRunner,
         return SSHCommandRunner.run_connection(
             connection=connection,
             cmd=cmd,
+            env=env,
             timeout=timeout,
             print_output=print_output,
-            allow_failures=allow_failures)
+            allow_failures=allow_failures,
+            asynchronous=asynchronous,
+            disown=disown)
 
     def run_in_workers(self,
                        cmd: str,
-                       timeout: float = base.DEFAULT_TIMEOUT,
+                       env: Dict[str, str] = None,
                        print_output: bool = False,
-                       allow_failures: bool = False) -> fabric.GroupResult:
+                       allow_failures: bool = False,
+                       timeout: float = base.DEFAULT_TIMEOUT,
+                       asynchronous: bool = False,
+                       disown: bool = False) -> fabric.GroupResult:
 
         workers_info = SSHClusterCommandRunner.workers_connection_info(
             cluster=self._cluster)
@@ -232,15 +288,21 @@ class SSHClusterCommandRunner(base.CommandClusterRunner,
         return SSHGroupCommandRunner.run_group(
             group=group,
             cmd=cmd,
+            env=env,
             timeout=timeout,
             print_output=print_output,
-            allow_failures=allow_failures)
+            allow_failures=allow_failures,
+            asynchronous=asynchronous,
+            disown=disown)
 
     def run_in_cluster(self,
                        cmd: str,
-                       timeout: float = base.DEFAULT_TIMEOUT,
+                       env: Dict[str, str] = None,
                        print_output: bool = False,
-                       allow_failures: bool = False) -> fabric.GroupResult:
+                       allow_failures: bool = False,
+                       timeout: float = base.DEFAULT_TIMEOUT,
+                       asynchronous: bool = False,
+                       disown: bool = False) -> fabric.GroupResult:
 
         cluster_info = SSHClusterCommandRunner.cluster_connection_info(
             cluster=self._cluster)
@@ -250,12 +312,15 @@ class SSHClusterCommandRunner(base.CommandClusterRunner,
         return SSHGroupCommandRunner.run_group(
             group=group,
             cmd=cmd,
+            env=env,
             timeout=timeout,
             print_output=print_output,
-            allow_failures=allow_failures)
+            allow_failures=allow_failures,
+            asynchronous=asynchronous,
+            disown=disown)
 
     @contextmanager
-    def in_head(self) -> ContextManager[RunCallableConnection]:
+    def in_head(self):  # -> ContextManager[RunCallableConnection]:
 
         head_info = SSHClusterCommandRunner.head_connection_info(cluster=self._cluster)
         connection = SSHCommandRunner.connection_from_node_info(node_info=head_info)
@@ -265,7 +330,7 @@ class SSHClusterCommandRunner(base.CommandClusterRunner,
         yield in_head
 
     @contextmanager
-    def in_workers(self) -> ContextManager[RunCallableGroup]:
+    def in_workers(self):  # -> ContextManager[RunCallableGroup]:
 
         workers_info = SSHClusterCommandRunner.workers_connection_info(
             cluster=self._cluster)
@@ -278,7 +343,7 @@ class SSHClusterCommandRunner(base.CommandClusterRunner,
         yield in_workers
 
     @contextmanager
-    def in_cluster(self) -> ContextManager[RunCallableGroup]:
+    def in_cluster(self):  # -> ContextManager[RunCallableGroup]:
 
         cluster_info = SSHClusterCommandRunner.cluster_connection_info(
             cluster=self._cluster)

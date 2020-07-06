@@ -39,10 +39,10 @@ class Docker(DataClassYAMLMixin):
     pull_before_run: bool = True
     run_options: List[str] = field(default_factory=list)
 
-    head_image: str = None
-    worker_image: str = None
-    head_run_options: List[str] = None
-    worker_run_options: List[str] = None
+    head_image: str = ""
+    worker_image: str = ""
+    head_run_options: List[str] = field(default_factory=list)
+    worker_run_options: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -57,3 +57,8 @@ class Cluster(ClusterMinimal):
 
     head_start_ray_commands: List[str] = field(default_factory=list)
     worker_start_ray_commands: List[str] = field(default_factory=list)
+
+    initial_workers: int = 1
+    idle_timeout_minutes: int = 5
+    autoscaling_mode: str = "default"
+    target_utilization_fraction: float = 1.0
